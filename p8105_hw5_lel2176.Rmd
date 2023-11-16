@@ -1,0 +1,116 @@
+---
+title: "p8105_hw5_lel2176"
+output: github_document
+date: "2023-11-10"
+---
+
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(broom)
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+files = list.files(path = "data/data", pattern = ".csv", full.names = TRUE)
+
+df = purrr::map(files, read_csv) |>  
+  bind_rows() |> 
+  mutate(arm = as.factor(if_else(row_number() %in% c(1:10), "Control", "Experimental")),
+         ID = row_number()) |> 
+  relocate(arm, ID, .before = "week_1") |> 
+  pivot_longer(cols = week_1:week_8, names_to = "week", values_to = "value") |> 
+  mutate(
+    week = case_match(
+      week, 
+      "week_1" ~ "1",
+      "week_2" ~ "2", 
+      "week_3" ~ "3", 
+      "week_4" ~ "4",
+      "week_5" ~ "5", 
+      "week_6" ~ "6",
+      "week_7" ~ "7",
+      "week_8" ~ "8"
+    )
+  )
+
+
+df |>  
+  knitr::kable()
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+df |>
+  ggplot(aes(x = week, y = value, color = arm, group = ID)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Subject Observation Values by Week ~ Control vs. Experimental Group") +
+  facet_wrap(~arm)
+```
+
+The experimental arm of the trial has higher average and overall values of the observations than the control arm of the trial. The trend of the experimental group is slightly increasing and the trend of the control group is very slightly decreasing. 
+
+```{r}
+test = function(mu) {
+  
+  data = tibble(x = rnorm(n = 30, mean = mu, sd = 5))
+  
+  result = data |> 
+    t.test() |> 
+    broom::tidy() |> 
+    select(estimate, p.value) 
+    
+    result
+}
+
+output = expand_grid(
+  df = c(0, 1, 2, 3, 4, 5, 6), 
+  iteration = 1:5000
+) |> 
+  mutate(
+    results = map(df, test)
+  ) |> 
+  unnest(results)
+
+```
+
+```{r}
+output |> 
+  group_by(df) |>  
+  summarize(prop_rej = sum(p.value < 0.05)/5000) |>  
+  ggplot(aes(x = df, y = prop_rej)) +
+  scale_x_continuous(limits = c(1,6), breaks = seq(1,6,1)) + 
+  geom_point() + 
+  geom_path() +
+  labs(x = "Mean", y = "Proportion of Times That Null was Rejected")
+```
+
+As the true mean increases, the proportion of times that the null was rejected also increases. However the curve flattens out as it reaches 1 and does not exceed this value. 
+
+
+```{r}
+true =
+  output |> 
+  group_by(df) |> 
+  summarize(mean = mean(estimate))
+
+reject = 
+  output |> 
+  filter(p.value < 0.05) |> 
+  group_by(df) |> 
+  summarize(mean = mean(estimate))
+  
+
+avg_est = ggplot(true, aes(x = df, y = mean)) +
+  geom_line() +
+  geom_line(data = reject, color = "red") +
+  labs(x = "True Mean", y = "Avg Estimated Mean", title = "Trend of True Vs. Average Estimated Mean")
+
+avg_est
+```
+
+
+In this graph, we see that the average estimated mean differs from the true mean for values 0-4. However, from values 4 and above, the estimated mean is equivalent to the true mean. This is seen on the graph by the red line representing the average estimated mean, and the black line representing the true mean. The two lines follow the same trend from values 4 and above. 
